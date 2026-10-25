@@ -1,0 +1,103 @@
+{
+  "name": "Assistente de Investimentos - RPA e n8n",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "clientes",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "f829c9f8-32ed-438c-8484-5e36c2fedc82",
+      "name": "Webhook Clientes",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "webhookId": "6cdacded-7dce-401c-b174-5b5027f51508"
+    },
+    {
+      "parameters": {
+        "url": "https://digitalinnovationone.github.io/dio-lab-assistente-investimentos-rpa-n8n/data.csv",
+        "options": {}
+      },
+      "id": "a1b2c3d4-e5f6-47a8-9b0c-1d2e3f4a5b6c",
+      "name": "Buscar Investimentos CSV",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Obter a lista de clientes recebida pelo nó Webhook\nconst webhookBody = $('Webhook Clientes').first().json.body;\nconst clientes = webhookBody.clientes || [];\n\n// 2. Obter o conteúdo do CSV baixado pelo nó HTTP Request\nconst csvRaw = $input.first().json.data || $input.first().json;\nconst csvText = typeof csvRaw === 'string' ? csvRaw : JSON.stringify(csvRaw);\n\n// 3. Processar as linhas do CSV de investimentos\nconst linhas = csvText.split('\\n').map(l => l.trim()).filter(l => l.length > 0);\nconst investimentos = [];\n\nfor (let i = 1; i < linhas.length; i++) {\n  const colunas = linhas[i].split(',');\n  if (colunas.length >= 4) {\n    investimentos.push({\n      perfil: colunas[0].trim(),\n      produto: colunas[1].trim(),\n      minimo: parseFloat(colunas[2].trim()) || 0,\n      rentabilidade: colunas[3].trim()\n    });\n  }\n}\n\n// 4. Cruzar clientes com investimentos e gerar mensagens personalizadas\nconst clientesComRecomendacao = clientes.map(cliente => {\n  const opcoesPerfil = investimentos.filter(\n    inv => inv.perfil.toLowerCase() === (cliente.perfil || '').toLowerCase()\n  );\n\n  const resumoOpcoes = opcoesPerfil.map(\n    op => `• ${op.produto} (Aplicação mín: R$ ${op.minimo}, Rentabilidade: ${op.rentabilidade})`\n  ).join('\\n');\n\n  const mensagem = `Olá, ${cliente.nome}!\\n\\n` +\n    `Identificamos que seu perfil de investidor é ${cliente.perfil} e seu saldo disponível é ${cliente.saldo}.\\n` +\n    `Selecionamos as seguintes oportunidades ideais para você:\\n${resumoOpcoes}\\n\\n` +\n    `Fale com seu consultor para iniciar os aportes!`;\n\n  return {\n    nome: cliente.nome,\n    email: cliente.email,\n    saldo: cliente.saldo,\n    perfil: cliente.perfil,\n    investimentos_sugeridos: opcoesPerfil,\n    mensagem_personalizada: mensagem\n  };\n});\n\nreturn clientesComRecomendacao.map(item => ({ json: item }));"
+      },
+      "id": "b2c3d4e5-f6a7-48b9-ac1d-2e3f4a5b6c7d",
+      "name": "Cruzar Dados e Gerar Mensagens",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"sucesso\": true,\n  \"total_processados\": $input.all().length,\n  \"clientes\": $input.all().map(i => i.json)\n}",
+        "options": {}
+      },
+      "id": "c3d4e5f6-a7b8-49ca-bd2e-3f4a5b6c7d8e",
+      "name": "Responder Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        940,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Clientes": {
+      "main": [
+        [
+          {
+            "node": "Buscar Investimentos CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Investimentos CSV": {
+      "main": [
+        [
+          {
+            "node": "Cruzar Dados e Gerar Mensagens",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cruzar Dados e Gerar Mensagens": {
+      "main": [
+        [
+          {
+            "node": "Responder Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "ProjInvestN8N123"
+}

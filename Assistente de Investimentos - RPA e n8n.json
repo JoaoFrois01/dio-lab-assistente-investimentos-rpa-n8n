@@ -1,0 +1,191 @@
+{
+  "name": "Assistente de Investimentos - RPA e n8n",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "clientes",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "f829c9f8-32ed-438c-8484-5e36c2fedc82",
+      "name": "Webhook Clientes",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        144,
+        304
+      ],
+      "webhookId": "6cdacded-7dce-401c-b174-5b5027f51508"
+    },
+    {
+      "parameters": {
+        "url": "https://digitalinnovationone.github.io/dio-lab-assistente-investimentos-rpa-n8n/data.csv",
+        "options": {}
+      },
+      "id": "a1b2c3d4-e5f6-47a8-9b0c-1d2e3f4a5b6c",
+      "name": "Buscar Investimentos CSV",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        384,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Obter a lista de clientes recebida pelo nó Webhook\nconst webhookBody = $('Webhook Clientes').first().json.body;\nconst clientes = webhookBody.clientes || [];\n\n// 2. Obter o conteúdo do CSV baixado pelo nó HTTP Request\nconst csvRaw = $input.first().json.data || $input.first().json;\nconst csvText = typeof csvRaw === 'string' ? csvRaw : JSON.stringify(csvRaw);\n\n// 3. Processar as linhas do CSV de investimentos\nconst linhas = csvText.split('\\n').map(l => l.trim()).filter(l => l.length > 0);\nconst investimentos = [];\n\nfor (let i = 1; i < linhas.length; i++) {\n  const colunas = linhas[i].split(',');\n  if (colunas.length >= 4) {\n    investimentos.push({\n      perfil: colunas[0].trim(),\n      produto: colunas[1].trim(),\n      minimo: parseFloat(colunas[2].trim()) || 0,\n      rentabilidade: colunas[3].trim()\n    });\n  }\n}\n\n// 4. Cruzar clientes com investimentos e gerar mensagens personalizadas\nconst clientesComRecomendacao = clientes.map(cliente => {\n  const opcoesPerfil = investimentos.filter(\n    inv => inv.perfil.toLowerCase() === (cliente.perfil || '').toLowerCase()\n  );\n\n  const resumoOpcoes = opcoesPerfil.map(\n    op => `• ${op.produto} (Aplicação mín: R$ ${op.minimo}, Rentabilidade: ${op.rentabilidade})`\n  ).join('\\n');\n\n  const mensagem = `Olá, ${cliente.nome}!\\n\\n` +\n    `Identificamos que seu perfil de investidor é ${cliente.perfil} e seu saldo disponível é ${cliente.saldo}.\\n` +\n    `Selecionamos as seguintes oportunidades ideais para você:\\n${resumoOpcoes}\\n\\n` +\n    `Fale com seu consultor para iniciar os aportes!`;\n\n  return {\n    nome: cliente.nome,\n    email: cliente.email,\n    saldo: cliente.saldo,\n    perfil: cliente.perfil,\n    investimentos_sugeridos: opcoesPerfil,\n    mensagem_personalizada: mensagem\n  };\n});\n\nreturn clientesComRecomendacao.map(item => ({ json: item }));"
+      },
+      "id": "b2c3d4e5-f6a7-48b9-ac1d-2e3f4a5b6c7d",
+      "name": "Cruzar Dados e Gerar Mensagens",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "c3d4e5f6-a7b8-49ca-bd2e-3f4a5b6c7d8e",
+      "name": "Responder Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1440,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Você é um consultor financeiro profissional e acolhedor.\nEscreva uma mensagem personalizada e persuasiva para o cliente abaixo:\n\n- Nome: {{ $json.nome }}\n- Perfil de Risco: {{ $json.perfil }}\n- Saldo Disponível: {{ $json.saldo }}\n- Opções de Investimento Compatíveis: {{ $json.investimentos_sugeridos[0] }}\n\nOrientações:\n1. Chame o cliente pelo primeiro nome.\n2. Explique brevemente por que essas opções combinam com o perfil dele.\n3. Incentive-o a realizar o aporte com segurança.\n4. Mantenha a resposta em até 2 parágrafos curtos.",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1024,
+        304
+      ],
+      "id": "b379ff75-ac88-424e-8dff-3bdb7c1c911f",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.8-flash",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        1024,
+        496
+      ],
+      "id": "4ce1da8e-1345-4189-aa21-39007785047c",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "MkaHlEFE0BbIyDRn",
+          "name": "Google Gemini(PaLM) Api account 3"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        816,
+        304
+      ],
+      "id": "6fcbdf74-5994-43c5-b6b7-4ff7ef07b404",
+      "name": "Limit"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Clientes": {
+      "main": [
+        [
+          {
+            "node": "Buscar Investimentos CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Investimentos CSV": {
+      "main": [
+        [
+          {
+            "node": "Cruzar Dados e Gerar Mensagens",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cruzar Dados e Gerar Mensagens": {
+      "main": [
+        [
+          {
+            "node": "Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Responder Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "754db3f5-46b5-4e42-a709-6d85b34ca139",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8e6cf4a70c6186dba3c788d0162dfe68008e378ca4b3f4a00ce4a6dca3aa6600"
+  },
+  "nodeGroups": [],
+  "id": "ProjInvestN8N123",
+  "tags": []
+}
